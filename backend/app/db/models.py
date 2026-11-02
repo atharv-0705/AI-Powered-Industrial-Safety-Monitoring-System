@@ -27,6 +27,7 @@ class SafetyIncidentRecord:
     confidence: float = 0.0
     bbox_xyxy: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
     snapshot_path: Optional[str] = None
+    video_path: Optional[str] = None
     vlm_verified: bool = False
     vlm_summary: Optional[str] = None
     recommended_action: Optional[str] = None
@@ -64,6 +65,7 @@ class SafetyIncidentRecord:
             factors_str,
             resolved,
             resolved_at,
+            *optional,
         ) = row
 
         bbox = tuple(json.loads(bbox_str)) if bbox_str else (0.0, 0.0, 0.0, 0.0)
@@ -81,6 +83,7 @@ class SafetyIncidentRecord:
             confidence=confidence,
             bbox_xyxy=bbox,
             snapshot_path=snapshot_path,
+            video_path=optional[0] if optional else None,
             vlm_verified=bool(vlm_verified),
             vlm_summary=vlm_summary,
             recommended_action=recommended_action,

@@ -6,12 +6,12 @@ are added from Week 9-10 onward without changing this file's shape.
 import logging
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from backend.app.api import websocket
-from backend.app.api.routes import health, incidents
+from backend.app.api.routes import health, incidents, cameras
 from backend.app.core.config import get_settings
 from backend.app.core.pipeline_runner import get_pipeline_runner
 
@@ -35,15 +35,21 @@ app.add_middleware(
 snapshots_dir = Path("data/snapshots")
 snapshots_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/snapshots", StaticFiles(directory=str(snapshots_dir)), name="snapshots")
+videos_dir = Path("data/videos")
+videos_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/videos", StaticFiles(directory=str(videos_dir)), name="videos")
 
 # Mount API routers
 app.include_router(health.router, prefix="/api", tags=["health"])
 app.include_router(incidents.router, prefix="/api")
+app.include_router(cameras.router, prefix="/api")
 app.include_router(websocket.router, tags=["websocket"])
 
 
 @app.on_event("startup")
 async def on_startup():
+    from backend.app.database.connection import init_db
+    init_db()
     logger.info(f"{settings.APP_NAME} starting up")
     logger.info(f"Configured video source: {settings.VIDEO_SOURCE}")
 
@@ -66,6 +72,18 @@ async def start_pipeline(source: str | None = None):
     runner = get_pipeline_runner()
     await runner.start(source_override=source)
     return {"status": "started", "details": runner.get_status()}
+
+
+@app.post("/api/videos")
+async def upload_video(file: UploadFile = File(...)):
+    from backend.app.api.routes.cameras import save_uploaded_video
+    return await save_uploaded_video(file)
+
+
+@app.get("/api/videos")
+def list_videos():
+    from backend.app.api.routes.cameras import list_uploaded_videos
+    return list_uploaded_videos()
 
 
 @app.post("/api/pipeline/stop")

@@ -56,6 +56,7 @@ class PipelineRunner:
         self._fps = 0.0
         self._frame_count = 0
         self._current_scene_risk = 0.0
+        self._active_source = self.settings.VIDEO_SOURCE
 
     @property
     def is_running(self) -> bool:
@@ -67,7 +68,7 @@ class PipelineRunner:
             "fps": round(self._fps, 1),
             "frame_count": self._frame_count,
             "scene_risk": round(self._current_scene_risk, 1),
-            "video_source": self.settings.VIDEO_SOURCE,
+            "video_source": self._active_source,
         }
 
     async def start(self, source_override: Optional[str] = None):
@@ -77,6 +78,7 @@ class PipelineRunner:
             return
 
         source = source_override if source_override is not None else self.settings.VIDEO_SOURCE
+        self._active_source = source
         self._running = True
         self._task = asyncio.create_task(self._run_loop(source))
         logger.info(f"Pipeline started with video source: {source}")
@@ -346,6 +348,7 @@ class PipelineRunner:
                 activity=activities.get(track_id, "unknown"),
                 confidence=v.confidence,
                 snapshot_path=snapshot_path,
+                video_path=(f"/videos/{Path(self._active_source).name}" if "data/videos" in self._active_source.replace("\\", "/") else None),
                 contributing_factors=risk_obj.contributing_factors if risk_obj else [event_type],
                 resolved=False,
             )

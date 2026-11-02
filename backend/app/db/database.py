@@ -76,6 +76,9 @@ class IncidentDatabase:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_incidents_timestamp ON incidents(timestamp DESC)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_incidents_risk_level ON incidents(risk_level)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_incidents_resolved ON incidents(resolved)")
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(incidents)")}
+            if "video_path" not in columns:
+                conn.execute("ALTER TABLE incidents ADD COLUMN video_path TEXT")
             conn.commit()
 
         logger.info(f"Initialized incident database at {self.db_path}")
@@ -138,8 +141,8 @@ class IncidentDatabase:
                     timestamp, timestamp_iso, track_id, event_type, risk_level,
                     risk_score, activity, confidence, bbox_xyxy, snapshot_path,
                     vlm_verified, vlm_summary, recommended_action, contributing_factors,
-                    resolved, resolved_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    resolved, resolved_at, video_path
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     incident.timestamp,
@@ -158,6 +161,7 @@ class IncidentDatabase:
                     json.dumps(incident.contributing_factors),
                     1 if incident.resolved else 0,
                     incident.resolved_at,
+                    incident.video_path,
                 ),
             )
             incident.id = cursor.lastrowid

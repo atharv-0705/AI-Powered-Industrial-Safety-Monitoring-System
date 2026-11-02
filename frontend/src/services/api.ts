@@ -198,8 +198,36 @@ export const apiService = {
   /**
    * Camera List
    */
-  async getCameras(): Promise<CameraFeed[]> {
-    return DEMO_CAMERAS;
+  async getCameras(isDemoMode = true): Promise<CameraFeed[]> {
+    if (isDemoMode) return [...DEMO_CAMERAS];
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/cameras`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const rows: Array<{ id: string; name: string; source_type: CameraFeed["type"]; source_url: string; resolution: string; target_fps: number; status: CameraFeed["status"]; active?: boolean }> = await res.json();
+      return rows.map((camera) => ({
+        id: camera.id, name: camera.name, location: camera.name,
+        type: camera.source_type, source: camera.source_url,
+        status: camera.status, currentFps: camera.target_fps,
+        peopleCount: 0, activeAlerts: 0, resolution: camera.resolution,
+        active: camera.active,
+      }));
+    } catch {
+      return [];
+    }
+  },
+
+  async uploadVideo(file: File): Promise<{ name: string; source: string; url: string; size: number }> {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${API_BASE_URL}/api/videos`, { method: "POST", body: form });
+    if (!res.ok) throw new Error(`Video upload failed (${res.status})`);
+    return res.json();
+  },
+
+  async getVideoHistory(): Promise<Array<{ name: string; source: string; url: string; size: number; modified: number }>> {
+    const res = await fetch(`${API_BASE_URL}/api/videos`);
+    if (!res.ok) throw new Error(`Could not load video history (${res.status})`);
+    return res.json();
   },
 
   /**

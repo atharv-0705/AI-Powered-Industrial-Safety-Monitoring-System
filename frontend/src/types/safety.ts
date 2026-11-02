@@ -95,6 +95,7 @@ export interface IncidentRecord {
   confidence: number;
   bbox_xyxy: [number, number, number, number];
   snapshot_path?: string | null;
+  video_path?: string | null;
   vlm_verified: boolean;
   vlm_summary?: string | null;
   recommended_action?: string | null;

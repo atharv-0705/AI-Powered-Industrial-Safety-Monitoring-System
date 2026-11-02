@@ -16,18 +16,22 @@ import { SeverityBadge } from "@/components/common/SeverityBadge";
 import { useSafetyWebSocket } from "@/hooks/useSafetyWebSocket";
 import { apiService } from "@/services/api";
 import { DEMO_CAMERAS } from "@/data/demoData";
-import { ZonePolygon } from "@/types/camera";
+import { CameraFeed, ZonePolygon } from "@/types/camera";
 import { formatViolationName } from "@/lib/utils";
 
 export const LiveMonitoring: React.FC = () => {
-  const { selectedCameraId } = useOutletContext<{ selectedCameraId: string }>();
-  const { frame, telemetry, isConnected, isStale, isDemoMode, reconnect } = useSafetyWebSocket();
+  const { selectedCameraId, cameras, isDemoMode: appDemoMode, setIsDemoMode: setAppDemoMode } = useOutletContext<{ selectedCameraId: string; cameras: CameraFeed[]; isDemoMode: boolean; setIsDemoMode: (value: boolean) => void }>();
+  const { frame, telemetry, isConnected, isStale, isDemoMode, setIsDemoMode, reconnect } = useSafetyWebSocket();
 
   const [pipelineRunning, setPipelineRunning] = useState<boolean>(false);
   const [activeSource, setActiveSource] = useState<string>("0");
   const [zones, setZones] = useState<ZonePolygon[]>([]);
   const [customPath, setCustomPath] = useState<string>("");
+  const [videoHistory, setVideoHistory] = useState<Array<{ name: string; source: string; url: string; size: number; modified: number }>>([]);
+  const [uploadError, setUploadError] = useState<string>("");
   const [isStarting, setIsStarting] = useState<boolean>(false);
+
+  useEffect(() => setIsDemoMode(appDemoMode), [appDemoMode, setIsDemoMode]);
 
   const [overlays, setOverlays] = useState<OverlayVisibilityState>({
     showBoundingBoxes: true,
@@ -52,6 +56,26 @@ export const LiveMonitoring: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    apiService.getVideoHistory().then(setVideoHistory).catch(() => setVideoHistory([]));
+  }, []);
+
+  const handleVideoUpload = async (file?: File) => {
+    if (!file) return;
+    setUploadError("");
+    setAppDemoMode(false);
+    setIsDemoMode(false);
+    try {
+      const uploaded = await apiService.uploadVideo(file);
+      setVideoHistory(await apiService.getVideoHistory());
+      setCustomPath(uploaded.source);
+      setActiveSource(uploaded.source);
+      await handleStartPipeline(uploaded.source);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Video upload failed");
+    }
+  };
+
   const handleStartPipeline = async (sourceToUse?: string) => {
     setIsStarting(true);
     const src = sourceToUse || activeSource;
@@ -69,7 +93,7 @@ export const LiveMonitoring: React.FC = () => {
     }
   };
 
-  const currentCamera = DEMO_CAMERAS.find((c) => c.id === selectedCameraId) || DEMO_CAMERAS[0];
+  const currentCamera = cameras.find((c) => c.id === selectedCameraId) || DEMO_CAMERAS[0];
 
   const sceneScore = telemetry?.scene_risk?.overall_score ?? 15.0;
   const sceneLevel = telemetry?.scene_risk?.overall_level ?? "LOW";
@@ -93,6 +117,9 @@ export const LiveMonitoring: React.FC = () => {
               disabled={pipelineRunning}
               className="px-3 py-1.5 text-xs font-mono bg-slate-900 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:border-blue-500 disabled:opacity-50"
             >
+              {activeSource && !["0", "source/Alone-man-climbing-SnapYT.App.mp4", "source/cctv_27c12fe4.mp4"].includes(activeSource) && (
+                <option value={activeSource}>Uploaded: {activeSource.split(/[\\/]/).pop()}</option>
+              )}
               <option value="0">Default Webcam 0 (Live Device)</option>
               <option value="source/Alone-man-climbing-SnapYT.App.mp4">
                 Test Clip: Pylon Climbing (MP4)
@@ -175,25 +202,26 @@ export const LiveMonitoring: React.FC = () => {
           />
 
           {/* Quick Source Path Input for Custom Recorded MP4s */}
-          <div className="p-3 rounded-xl bg-[#111C2E] border border-[#25334A] flex items-center gap-2 text-xs">
+          <div className="p-3 rounded-xl bg-[#111C2E] border border-[#25334A] flex flex-wrap items-center gap-2 text-xs">
             <Upload className="w-4 h-4 text-cyan-400 flex-shrink-0" />
-            <span className="text-slate-400 font-medium flex-shrink-0">
-              Custom Video Source:
-            </span>
-            <input
-              type="text"
-              placeholder="e.g. source/cctv_27c12fe4.mp4 or rtsp://..."
-              value={customPath}
-              onChange={(e) => setCustomPath(e.target.value)}
-              className="flex-1 px-3 py-1 bg-slate-900 border border-slate-700 rounded text-slate-100 font-mono text-xs focus:outline-none focus:border-blue-500"
-            />
+            <label className="text-slate-400 font-medium flex-shrink-0">Custom Video Source:</label>
+            <input type="file" accept="video/*,.mkv" disabled={pipelineRunning}
+              onChange={(e) => handleVideoUpload(e.target.files?.[0])}
+              className="flex-1 min-w-[200px] px-2 py-1 bg-slate-900 border border-slate-700 rounded text-slate-300 text-xs file:mr-2 file:rounded file:border-0 file:bg-slate-700 file:px-2 file:py-1 file:text-slate-100" />
+            <select value={customPath} onChange={(e) => { setCustomPath(e.target.value); setActiveSource(e.target.value); }} disabled={pipelineRunning}
+              className="max-w-[240px] px-2 py-1 bg-slate-900 border border-slate-700 rounded text-slate-200 text-xs">
+              <option value="">Video history</option>
+              {videoHistory.map((video) => <option key={video.source} value={video.source}>{video.name}</option>)}
+            </select>
             <button
-              onClick={() => handleStartPipeline(customPath)}
-              disabled={!customPath.trim() || pipelineRunning}
+              onClick={() => handleStartPipeline(activeSource)}
+              disabled={!activeSource.trim() || pipelineRunning}
               className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-semibold text-xs"
             >
               Apply Source
             </button>
+            {uploadError && <span className="w-full text-red-400">{uploadError}</span>}
+            {videoHistory.length > 0 && <span className="w-full text-slate-500">{videoHistory.length} uploaded video(s) saved in history.</span>}
           </div>
         </div>
 

@@ -8,7 +8,7 @@ import {
   Wifi,
   WifiOff,
 } from "lucide-react";
-import { DEMO_CAMERAS } from "@/data/demoData";
+import { CameraFeed } from "@/types/camera";
 
 interface TopNavProps {
   isDemoMode: boolean;
@@ -17,6 +17,7 @@ interface TopNavProps {
   selectedCameraId: string;
   onSelectCamera: (cameraId: string) => void;
   unresolvedCount?: number;
+  cameras: CameraFeed[];
 }
 
 export const TopNav: React.FC<TopNavProps> = ({
@@ -26,6 +27,7 @@ export const TopNav: React.FC<TopNavProps> = ({
   selectedCameraId,
   onSelectCamera,
   unresolvedCount = 0,
+  cameras,
 }) => {
   const location = useLocation();
   const [timeStr, setTimeStr] = useState<string>("");
@@ -106,11 +108,12 @@ export const TopNav: React.FC<TopNavProps> = ({
             onChange={(e) => onSelectCamera(e.target.value)}
             className="pl-8 pr-7 py-1 text-xs font-mono font-medium bg-[#111C2E] border border-[#25334A] rounded-lg text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer appearance-none"
           >
-            {DEMO_CAMERAS.map((cam) => (
+            {cameras.map((cam) => (
               <option key={cam.id} value={cam.id}>
                 {cam.id}: {cam.name}
               </option>
             ))}
+            {cameras.length === 0 && <option value="">No cameras available</option>}
           </select>
         </div>
 

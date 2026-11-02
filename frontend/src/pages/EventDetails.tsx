@@ -131,7 +131,7 @@ export const EventDetails: React.FC = () => {
             <div className="flex items-center justify-between pb-2 border-b border-slate-800">
               <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
                 <Eye className="w-4 h-4 text-cyan-400" />
-                Keyframe Visual Evidence Snapshot
+                {incident.video_path ? "Recorded Video Evidence" : "Keyframe Visual Evidence Snapshot"}
               </span>
               <span className="text-[10px] text-slate-400 font-mono">
                 Model Input Resolution: 640x480
@@ -140,7 +140,11 @@ export const EventDetails: React.FC = () => {
 
             {/* Evidence Image Viewer */}
             <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-slate-950 border border-slate-800 flex items-center justify-center">
-              {incident.snapshot_path ? (
+              {incident.video_path ? (
+                <video src={incident.video_path} controls className="w-full h-full object-contain" preload="metadata">
+                  Your browser cannot play this incident video.
+                </video>
+              ) : incident.snapshot_path ? (
                 <img
                   src={incident.snapshot_path}
                   alt="Incident keyframe evidence"

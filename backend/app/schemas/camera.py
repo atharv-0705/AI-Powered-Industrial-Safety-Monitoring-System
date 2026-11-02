@@ -12,6 +12,7 @@ class CameraBase(BaseModel):
     resolution: str = "1280x720"
     target_fps: float = 12.0
     status: str = "ONLINE"
+    active: Optional[bool] = None
 
 
 class CameraCreate(CameraBase):

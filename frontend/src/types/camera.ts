@@ -10,6 +10,7 @@ export interface CameraFeed {
   activeAlerts: number;
   resolution: string;
   thumbnailUrl?: string;
+  active?: boolean;
 }
 
 export interface ZonePolygon {

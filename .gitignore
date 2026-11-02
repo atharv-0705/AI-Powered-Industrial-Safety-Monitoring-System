@@ -33,6 +33,7 @@ buffer_example.npy
 data/raw/
 data/features/
 data/ppe/
+data/videos/
 data/*.db
 data/*.db-shm
 data/*.db-wal
