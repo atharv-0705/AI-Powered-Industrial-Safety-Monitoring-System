@@ -1,332 +1,248 @@
-# Multimodal Vision-Language Safety Monitoring System — MVP
+# AI-Powered Industrial Safety Monitoring System
 
-A real-time, edge-first AI safety monitoring system designed for industrial and construction environments. Combines local real-time computer vision (person tracking, pose estimation, temporal activity recognition, PPE verification, safety rule evaluation) with an asynchronous Vision-Language Model (Gemini 1.5 Flash) for intelligent incident audit and alerting.
+![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/API-FastAPI-009688?logo=fastapi&logoColor=white)
+![React](https://img.shields.io/badge/Frontend-React-61DAFB?logo=react&logoColor=black)
+![TypeScript](https://img.shields.io/badge/Language-TypeScript-3178C6?logo=typescript&logoColor=white)
+![OpenCV](https://img.shields.io/badge/Vision-OpenCV-5C3EE8?logo=opencv&logoColor=white)
+![PyTorch](https://img.shields.io/badge/ML-PyTorch-EE4C2C?logo=pytorch&logoColor=white)
 
-> **Target Hardware (SRS §13):** Lenovo LOQ Gen 12-class (NVIDIA RTX 3050 6GB VRAM, 16 GB RAM, Windows 11 / WSL2).  
-> **Key Architecture Decision:** See [`DECISIONS.md`](file:///c:/Users/athar/Downloads/Development%20of%20a%20Multimodal%20Vision-Language/DECISIONS.md) for full technology selection rationale, dataset analysis, and the SRS §17 Risk Register.
+An edge-oriented computer-vision application for monitoring workplace safety in industrial and construction environments. It processes webcam, RTSP, and uploaded video sources; tracks people; evaluates PPE and safety rules; and streams annotated frames and incident telemetry to a web dashboard.
 
----
+## Frontend Live Link
 
-## 1. Project Directory Blueprint
+> **Frontend Live Link:** _Add the Vercel URL here after deployment._
 
-The project follows a modular, industry-standard decoupled architecture:
+The frontend is deployable to Vercel. The FastAPI backend, inference models, camera source, database, and uploaded-video storage must run on a separate host with the required hardware and persistent storage.
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Features](#features)
+- [System Architecture](#system-architecture)
+- [Technology Stack](#technology-stack)
+- [Requirements](#requirements)
+- [Local Setup](#local-setup)
+- [Run the Application](#run-the-application)
+- [Use the Application](#use-the-application)
+- [Configuration and Model Assets](#configuration-and-model-assets)
+- [Testing and Profiling](#testing-and-profiling)
+- [Deploy the Frontend to Vercel](#deploy-the-frontend-to-vercel)
+- [Repository Layout](#repository-layout)
+- [Project Status](#project-status)
+- [Author](#author)
+
+## Overview
+
+The application combines a Python inference pipeline with a React dashboard. The backend ingests a video stream, runs person detection and tracking, estimates pose and activity, applies PPE and safety rules, calculates risk, stores incidents, and publishes frames and telemetry. The browser provides Live Mode for backend inference and Demo Mode for an illustrative UI walkthrough.
+
+This is a development and decision-support project. Treat model output as an aid for review, not as a replacement for site procedures or human supervision.
+
+## Features
+
+- **Multiple sources:** backend webcam, RTSP, and video file inputs.
+- **Person tracking:** detector boxes and persistent track IDs.
+- **Pose and activity:** pose-derived temporal features and HAR predictions when a trained checkpoint is available.
+- **Safety evaluation:** fall, PPE, restricted-zone, and climbing rules with per-person and scene risk scores.
+- **Live dashboard:** WebSocket video frames and telemetry, with controls for boxes, IDs/HAR, PPE badges, and hazard zones.
+- **Video upload and history:** upload a video from Live Monitoring, process it, and keep it under `data/videos/` for later selection.
+- **Incident evidence:** incident keyframes are saved under `data/snapshots/`; incidents created during an uploaded-video run can also play the source video in Event Details.
+- **Incident history:** REST endpoints and SQLite persistence for events, resolution status, and summary metrics.
+- **Optional VLM review:** Gemini integration is configurable; it is disabled by default.
+- **Demo Mode:** simulated telemetry and scene rendering for UI demonstrations without running the inference pipeline.
+
+## System Architecture
+
+```mermaid
+flowchart LR
+    S[Webcam / RTSP / Uploaded Video] --> I[OpenCV Ingestion]
+    I --> D[Person Detection and Tracking]
+    D --> P[Pose and Temporal Features]
+    P --> H[HAR]
+    D --> PPE[PPE Detection]
+    H --> R[Safety Rules and Risk Scoring]
+    PPE --> R
+    R --> DB[(SQLite Incidents and Snapshots)]
+    R --> V[Optional Gemini Review]
+    D --> WS[FastAPI WebSocket]
+    H --> WS
+    PPE --> WS
+    R --> WS
+    WS --> UI[React Dashboard]
+    DB --> API[FastAPI REST API]
+    API --> UI
 ```
-Development of a Multimodal Vision-Language/
-├── configs/
-│   └── config.yaml                     # Externalized pipeline thresholds, models, and zone configs
-├── backend/
-│   ├── app/                            # Application & service layer
-│   │   ├── main.py                     # FastAPI server entrypoint (CORS, router mounting, lifespan)
-│   │   ├── core/
-│   │   │   ├── config.py               # Pydantic BaseSettings (reads .env & overrides)
-│   │   │   └── env_check.py            # Hardware/GPU/CUDA/FFmpeg diagnostic tool
-│   │   ├── api/
-│   │   │   ├── websocket.py            # Low-latency streaming connection manager & endpoint
-│   │   │   └── routes/
-│   │   │       └── health.py           # GET /api/health watchdog and component status
-│   │   ├── ml/
-│   │   │   └── har_model.py            # PyTorch Small Temporal Transformer architecture definition
-│   │   ├── vlm/
-│   │   │   └── gemini_client.py        # Asynchronous Gemini 1.5 Flash client with fallback
-│   │   └── db/
-│   │       └── models.py               # Incident record schema (SQLite / PostgreSQL)
-│   ├── pipeline/                       # Modular computer vision & inference pipeline
-│   │   ├── ingestion.py                # OpenCV/FFmpeg stream ingestion with frame skipping
-│   │   ├── detector.py                 # YOLO11n person detector + ByteTrack association
-│   │   ├── pose.py                     # MediaPipe BlazePose estimation on per-person crops
-│   │   ├── features.py                 # 205-dim feature extraction & 32-frame deque buffer
-│   │   ├── har.py                      # Temporal Transformer inference wrapper (activity classifier)
-│   │   ├── ppe.py                      # Custom YOLO11n PPE detector (helmet, vest)
-│   │   ├── safety_engine.py            # Rule engine (fall, missing PPE, zone intrusion)
-│   │   └── risk_engine.py              # Composite deterministic risk scoring (0-100)
-│   ├── scripts/                        # Automated & manual exit-criteria verification scripts
-│   │   ├── test_video_source.py        # Week 1: Video source ingestion & FPS benchmark
-│   │   ├── test_tracking.py            # Week 2: YOLO11n + ByteTrack person tracking benchmark
-│   │   ├── test_pose.py                # Week 3: Pose landmark extraction & buffer verification
-│   │   └── test_activity_recognition.py# Week 4: End-to-end HAR inference test
-│   └── tests/                          # Automated pytest suite (Week 12 deliverable)
-├── frontend/                           # React + Vite + Tailwind CSS Web Dashboard (Week 11)
-├── notebooks/                          # Jupyter Notebooks for all model training (Strict Rule)
-│   ├── 04_har_training.ipynb           # Week 4: HAR dataset prep, training & evaluation
-│   └── 05_ppe_training.ipynb           # Week 5: PPE dataset prep, YOLO11n fine-tuning & eval
-├── data/                               # Dataset storage (Gitignored)
-│   ├── raw/<class>/                    # Raw input MP4/AVI clips for HAR & PPE
-│   ├── features/<class>/               # Pre-extracted (32, 205) feature tensors
-│   └── ppe/                            # YOLO-formatted images and annotation labels
-├── source/                             # Uploaded .mp4 videos for testing (climbing, CCTV, etc.)
-├── models/                             # Saved model checkpoints and manifests (Gitignored)
-├── .env.example                        # Environment variable blueprint
-├── requirements.txt                    # Python package dependencies
-├── DECISIONS.md                        # Architecture, dataset, and risk documentation
-└── README.md                           # This startup guide
-```
 
----
+## Technology Stack
 
-## 2. Setup & Installation
+| Area | Main technologies |
+|---|---|
+| Backend API | Python, FastAPI, SQLAlchemy, SQLite |
+| Video and vision | OpenCV, Ultralytics, MediaPipe |
+| Activity recognition | PyTorch temporal transformer |
+| Frontend | React, TypeScript, Vite, Tailwind CSS |
+| Live transport | WebSocket |
+| Charts | Recharts |
+| Optional scene review | Gemini API |
 
-### Windows 11 (PowerShell)
-```powershell
-# 1. Create and activate virtual environment
+## Requirements
+
+- Python 3.11 or newer and Node.js/npm.
+- A webcam or accessible video/RTSP source for Live Mode.
+- Model assets for the inference components you want to use. Check the configured paths below; trained HAR and PPE checkpoints are not included by default.
+- For GPU inference, install a PyTorch build compatible with the machine’s CUDA driver. CPU inference may work more slowly.
+
+## Local Setup
+
+### 1. Clone and install the backend
+
+```bash
+git clone https://github.com/atharv-0705/AI-Powered-Industrial-Safety-Monitoring-System.git
+cd AI-Powered-Industrial-Safety-Monitoring-System
+
 python -m venv .venv
-.venv\Scripts\activate
-
-# 2. Install standard dependencies
-pip install -r requirements.txt
-
-# 3. Install CUDA-enabled PyTorch (for RTX 3050 - CUDA 12.1 build)
-pip install torch --index-url https://download.pytorch.org/whl/cu121
-
-# 4. Install FFmpeg (system dependency for OpenCV video decoding)
-winget install --id=Gyan.FFmpeg -e
 ```
 
-### WSL2 / Ubuntu
+Activate the environment:
+
+```powershell
+# Windows PowerShell
+.venv\Scripts\Activate.ps1
+```
+
 ```bash
-python3 -m venv .venv
+# macOS / Linux
 source .venv/bin/activate
+```
+
+Install dependencies and create the local environment file:
+
+```bash
+python -m pip install --upgrade pip
 pip install -r requirements.txt
-pip install torch --index-url https://download.pytorch.org/whl/cu121
-sudo apt update && sudo apt install -y ffmpeg
 ```
 
-### Configuration (.env)
-Copy `.env.example` to `.env`:
-```bash
-cp .env.example .env
-```
-- For live webcam testing: set `VIDEO_SOURCE=0`
-- For recorded video file testing: set `VIDEO_SOURCE=data/sample.mp4`
+Copy `.env.example` to `.env`, then adjust the source and CORS settings if needed. For CUDA, replace the generic PyTorch package with the build recommended by the [official PyTorch install selector](https://pytorch.org/get-started/locally/).
 
----
+### 2. Install the frontend
 
-## 3. Quickstart & Verification
+In another terminal:
 
-### Step 1: Run Environment Diagnostic
-```bash
-python -m backend.app.core.env_check
-```
-Verifies Python, OpenCV, FFmpeg on PATH, and CUDA GPU availability on your RTX 3050.
-
-### Step 2: Start the FastAPI Backend
-```bash
-uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8010
-```
-- Open health endpoint: [http://localhost:8010/api/health](http://localhost:8010/api/health)
-- API docs: [http://localhost:8010/docs](http://localhost:8010/docs)
-
----
-
-## 4. Pipeline Component Testing
-
-### Week 1 — Video Ingestion & Throughput Test
-```bash
-python backend/scripts/test_video_source.py
-# Headless mode:
-python backend/scripts/test_video_source.py --no-display --seconds 15
-```
-Measures source ingestion FPS, checks frame skip ratio, and logs dropped frames.
-
-### Week 2 — Person Detection & Tracking (YOLO11n + ByteTrack)
-```bash
-python backend/scripts/test_tracking.py
-```
-- First run automatically downloads `yolo11n.pt` off-the-shelf COCO weights.
-- Displays bounding box overlays with persistent ByteTrack IDs.
-- Separately prints `ingestion_fps` and `inference_fps` (target: 10–15 FPS).
-
-### Week 3 — Pose Landmark Extraction & Feature Buffering (MediaPipe Pose)
-```bash
-python backend/scripts/test_pose.py
-# Or verify and dump a completed (32, 205) feature vector:
-python backend/scripts/test_pose.py --save-buffer 40
-```
-- Runs MediaPipe Pose on per-person crops (`model_complexity=1`, CPU-bound to preserve GPU VRAM).
-- Fills a 32-frame deque with 205-dimensional geometric features per tracked individual.
-
-### Week 4 — Human Activity Recognition (HAR)
-1. **Train Model:** Open and execute `notebooks/04_har_training.ipynb` (trains `TemporalActivityTransformer` on UCF101 climbing subset + custom webcam clips).
-2. **Run Live Inference on Webcam (Default):**
-```bash
-python backend/scripts/test_activity_recognition.py
-```
-- **Webcam Mode:** Predicts strictly between `standing`, `sitting`, and `walking`. If a person moves along the $x$, $y$, or $z$ axis, predicts `walking`; otherwise evaluates posture to predict `standing` or `sitting`. `climbing` and `running` are zeroed out in live webcam mode.
-3. **Run on Uploaded `.mp4` Videos (from `source/` folder):**
-```bash
-python backend/scripts/test_activity_recognition.py --source source/Alone-man-climbing-SnapYT.App.mp4
-```
-- **Video Mode:** Evaluates all 5 classes (`walking`, `running`, `standing`, `sitting`, `climbing`).
-
-### Week 5 — PPE Detection (Helmets, Vests, Persons)
-1. **Train / Fine-Tune Model:** Open and execute `notebooks/05_ppe_training.ipynb` or run:
-```bash
-python backend/scripts/train_ppe.py --epochs 25
-```
-2. **Run Live PPE Verification:**
-```bash
-python backend/scripts/test_ppe.py
-```
-- Real-time overlay associating helmets (head upper-30% IoU) and vests (torso 20-70% IoU) with tracked person IDs.
-- Reports live compliance status: `[HELMET OK]`, `[NO HELMET]`, `[VEST OK]`, `[NO VEST]`.
-
-### Weeks 6 & 7 — Safety Rules: Fall Detection, PPE Compliance & Zone Intrusion
-
-Run live safety rules pipeline test:
-```bash
-python backend/scripts/test_safety.py
-```
-- **Rule 1 (Fall Detection):** Fuses bounding box aspect ratio collapse (< 1.0), downward vertical velocity, and shoulder orientation angle (> 40°).
-- **Rule 2 (PPE Compliance):** Detects missing helmets (HIGH) and missing high-visibility vests (MEDIUM) for active workers.
-- **Rule 3 (Restricted Zone Intrusion):** Point-in-Polygon check on ankle landmarks (MediaPipe #27, #28) or bbox bottom center. Press **`z`** on the display window to interactively draw polygons with mouse clicks, or **`c`** to clear.
-- **Rule 4 (Dangerous Climbing):** Flags climbing activity without hardhat / head protection (CRITICAL).
-
-### Week 8 — Risk Scoring Engine (Composite Threat Metric)
-Run the automated mathematical tests and live visual threat HUD:
-```bash
-# Automated formula & persistence unit test suite:
-python backend/scripts/test_risk_engine.py --unit-tests
-
-# Live camera pipeline with risk gauge & worker risk badges:
-python backend/scripts/test_risk_engine.py
-```
-- **Composite Deterministic Metric ($0 - 100$):** Combines rule violation severity ($w_1$), activity risk ($w_2$), zone proximity ($w_3$), and violation persistence escalation ($+2\text{ pts/sec}$ unresolved non-compliance).
-- **Severity Levels:** `LOW` ($0-29$), `MEDIUM` ($30-59$), `HIGH` ($60-79$), `CRITICAL` ($80-100$).
-- **Scene Threat Gauge:** Dynamic scene-level aggregate threat assessment with exponential decay smoothing on violation resolution to eliminate flickering.
-
----
-
-## 5. Implementation Roadmap (Weeks 5–12)
-
-| Week | Component | Status | Deliverable |
-|---|---|---|---|
-| **Week 1** | Ingestion & Environment Check | **Complete** | OpenCV/FFmpeg video source, FastAPI skeleton, health endpoint |
-| **Week 2** | Person Detection & Tracking | **Complete** | YOLO11n + ByteTrack, persistent tracking, inference FPS benchmarking |
-| **Week 3** | Pose & Feature Extraction | **Complete** | MediaPipe BlazePose, 205-dim feature extractor, 32-frame bounded buffer |
-| **Week 4** | Human Activity Recognition (HAR) | **Complete** | Small Temporal Transformer architecture, training notebook, inference module |
-| **Week 5** | PPE Detection (Helmets, Vests) | **Complete** | Fine-tuned YOLO11n PPE detector, `notebooks/05_ppe_training.ipynb`, `backend/pipeline/ppe.py` |
-| **Week 6** | Safety Rules: Fall Detection | **Complete** | Aspect ratio collapse + vertical velocity + pose orientation fusion in `safety_engine.py` |
-| **Week 7** | Safety Rules: PPE & Zone Intrusion | **Complete** | Ankle Point-in-Polygon zone checks, interactive zone polygon GUI, dangerous climbing rule |
-| **Week 8** | Risk Scoring Engine | **Complete** | Multi-factor deterministic risk formula (0–100 score: LOW/MED/HIGH/CRIT), `risk_engine.py` |
-| **Week 9** | Multimodal VLM Integration | **Complete** | Gemini 1.5 Flash async verification, incident summaries, graceful fallback (`gemini_client.py`) |
-| **Week 10**| WebSocket Streaming & Database | **Complete** | Low-latency binary/JSON streaming, SQLite incident & snapshot storage (`database.py`, `websocket.py`) |
-| **Week 11**| Frontend Web Dashboard | **Complete** | React 18 + TypeScript + Vite + Tailwind dark industrial dashboard (`frontend/`) |
-| **Week 12**| System Integration & Profiling | In progress | Repeatable regression tests, pipeline throughput profiler, demo and deployment documentation; hardware soak test remains |
-
-### Running the System (Backend + Frontend)
-
-#### 1. Start the FastAPI Backend (WebSocket & REST API):
-```bash
-uvicorn backend.app.main:app --host 0.0.0.0 --port 8010 --reload
-```
-
-#### 2. Start the Frontend Industrial Safety Dashboard:
 ```bash
 cd frontend
-npm run dev
-```
-Open [http://localhost:5173](http://localhost:5173) in your browser. The frontend includes:
-- **Live Mode:** Real-time canvas stream, ByteTrack bounding boxes, pose, HAR, PPE badges, and SQLite incident log.
-- **Demo Mode:** Fully simulated industrial multi-camera feeds, interactive hazard zones, and realistic risk timeline.
-
-### Running Week 9 & 10 Verification
-
-To verify the SQLite incident database, asynchronous Gemini 1.5 Flash VLM client with fallback, static snapshot serving, and WebSocket telemetry streaming:
-
-```bash
-python backend/scripts/test_vlm_and_db.py
+npm install
 ```
 
-To run the FastAPI server with live streaming and incident REST endpoints:
+For local development, the Vite proxy forwards `/api`, `/ws`, `/snapshots`, and `/videos` to `http://localhost:8010`. The optional `frontend/.env.example` documents the API and WebSocket URLs for deployments where the backend is hosted separately.
+
+## Run the Application
+
+Start FastAPI from the repository root:
 
 ```bash
 uvicorn backend.app.main:app --host 0.0.0.0 --port 8010 --reload
 ```
 
----
+Start Vite from the `frontend` directory:
 
-## 6. Week 12: Profiling, Testing & Demo Hardening
+```bash
+npm run dev
+```
 
-### Automated regression checks
+Open [http://localhost:5173](http://localhost:5173). FastAPI documentation is available at [http://localhost:8010/docs](http://localhost:8010/docs), and the health endpoint is [http://localhost:8010/api/health](http://localhost:8010/api/health).
 
-From the repository root, after installing `requirements.txt`:
+## Use the Application
+
+### Demo Mode
+
+Choose **Demo Mode** in the top bar to view the simulated scene and telemetry. This mode is useful for presenting the dashboard without camera hardware or model inference. Simulated detections are illustrative; they are not predictions from the safety models.
+
+### Process an uploaded video
+
+1. Start both the backend and frontend, then choose **Live Mode**.
+2. Open **Live Monitoring** and select a video under **Custom Video Source**. MP4 is recommended; the backend accepts MP4, MOV, AVI, MKV, WebM, MPEG, and MPG files up to 500 MB.
+3. The backend stores the upload in `data/videos/` and starts processing it. Uploaded videos appear in the video history for later selection.
+4. Enable the desired **Boxes**, **IDs & HAR**, **PPE Badges**, and **Hazard Zones** overlays.
+5. Review generated incidents under **Events & Incidents**. If an incident was created during this uploaded-video run, Event Details can play the full source video and show the saved keyframe snapshot.
+
+### Process a webcam
+
+1. Connect the webcam to the computer running FastAPI. The default OpenCV source is device `0`; set `VIDEO_SOURCE=0` in `.env` or choose **Default Webcam 0** in Live Monitoring.
+2. Select **Live Mode** and click **Start Processing**.
+3. Enable the overlays you want to inspect. Webcam HAR is configured for `walking`, `standing`, and `sitting`. Recorded-video HAR supports those classes plus `running` and `climbing`.
+
+The browser displays the backend stream; it does not grant the backend access to the browser’s webcam. If FastAPI runs on a different computer, that host needs its own camera or access to an RTSP stream. HAR needs the trained checkpoint; detector and PPE performance likewise depends on the configured model assets.
+
+## Configuration and Model Assets
+
+Backend configuration is read from `.env` and `backend/app/core/config.py`.
+
+| Setting | Default | Purpose |
+|---|---|---|
+| `VIDEO_SOURCE` | `0` | Webcam index, video path, or configured stream source |
+| `PROCESSING_FPS` | `12` | Target pipeline processing rate |
+| `DETECTOR_MODEL` | `yolo11n.pt` | Person detector model path/name |
+| `HAR_CHECKPOINT_PATH` | `models/har_temporal_transformer.pt` | Trained activity-recognition checkpoint |
+| `PPE_MODEL_PATH` | `models/ppe_yolo11n.pt` | PPE model checkpoint |
+| `GEMINI_API_KEY` | empty | Optional Gemini API key; keep it only in the backend environment |
+| `VLM_ENABLED` | `false` | Enable optional VLM incident review |
+| `DATABASE_URL` | `sqlite:///./data/safety_monitor.db` | Incident/configuration database |
+| `CORS_ORIGINS` | local Vite origins | Comma-separated frontend origin allowlist |
+
+Keep `.env` and API keys out of source control. The repository ignores local databases, uploaded videos, datasets, and model checkpoint files. Configure persistent storage on the backend host if uploaded videos and incidents must survive redeployments.
+
+## Testing and Profiling
+
+Run the Week 12 backend regression tests from the repository root:
 
 ```bash
 pytest backend/tests -q
 ```
 
-The Week 12 tests cover webcam-versus-file source classification, uploaded-video validation/history, and persistence of a video link on an incident record. The existing scripts under `backend/scripts/` remain useful for manual model and hardware checks.
-
-### End-to-end throughput profile
-
-Start the backend first, then run this in another terminal. The profiler starts the pipeline, samples frame count and backend FPS for one minute, prints measured throughput and backend FPS range, then stops the pipeline.
+With FastAPI running and a usable camera or video source, profile end-to-end pipeline throughput:
 
 ```bash
 python backend/scripts/profile_pipeline.py --seconds 60
 python backend/scripts/profile_pipeline.py --source data/videos/sample.mp4 --seconds 120
 ```
 
-Use the same clip, model weights, resolution, and device when comparing results. The script profiles throughput; it does not replace the longer hardware soak test. Week 12 exit checks should also include a 30-minute run while watching RAM/VRAM, dropped frames, reconnects, database growth, and camera/model recovery after disconnects.
+The profiler reports frame throughput and backend FPS. For a hardware soak test, run the pipeline for at least 30 minutes and monitor RAM/VRAM, dropped frames, reconnects, database growth, and recovery after source/model errors. Compare profiler results using the same source, model assets, resolution, and hardware.
 
-### Local app run
+## Deploy the Frontend to Vercel
 
-```bash
-# Terminal 1, repository root
-uvicorn backend.app.main:app --host 0.0.0.0 --port 8010
+The Vercel project should use `frontend` as its **Root Directory**. Use the Vite preset, `npm run build` as the build command, and `dist` as the output directory. The checked-in `frontend/vercel.json` enables SPA deep links.
 
-# Terminal 2
-cd frontend
-npm install
-npm run dev
+Deploy FastAPI separately on a host that supports the required inference workload and persistent video/database storage. In Vercel’s project environment variables, set:
+
+```text
+VITE_API_BASE_URL=https://your-backend.example.com
+VITE_WS_URL=wss://your-backend.example.com/ws/stream
 ```
 
-Open `http://localhost:5173`. The backend must be running for live mode, upload, camera enumeration, saved video history, and live incidents. The Vercel deployment only hosts the frontend; deploy FastAPI separately on a machine with the required model files, camera access, and persistent storage.
+Set the backend’s `CORS_ORIGINS` to include the Vercel domain. `VITE_` values are public browser configuration; do not put backend secrets there. See Vercel’s [Vite deployment guide](https://vercel.com/docs/frameworks/frontend/vite) and [environment variable documentation](https://vercel.com/docs/environment-variables) for setup details.
 
----
+## Repository Layout
 
-## 7. Demo Mode vs Live Mode
+```text
+backend/
+  app/                  FastAPI routes, database, services, and pipeline runner
+  pipeline/             Detection, pose, HAR, PPE, and safety/risk logic
+  scripts/              Training, diagnostics, and profiling scripts
+  tests/                Week 12 regression tests
+frontend/
+  src/                  React pages, components, API, and WebSocket client
+  vercel.json           SPA routing configuration for Vercel
+configs/                Runtime configuration
+data/                   Local database, snapshots, and uploaded videos
+models/                 Model assets (some are generated or supplied locally)
+notebooks/              HAR and PPE training notebooks
+DECISIONS.md             Architecture decisions and project risk register
+```
 
-The top-bar mode switch controls the dashboard data source. **Demo Mode** is a frontend simulation with mock cameras, synthetic scene art, and generated telemetry; it does not run YOLO, pose, HAR, PPE, or the backend safety pipeline. Use it to present and navigate the UI without camera hardware or model files. **Live Mode** connects the frontend to FastAPI and its WebSocket. It displays frames and telemetry produced by the backend pipeline and writes incidents to the local SQLite database.
+## Project Status
 
-### A. Upload a video and see detections
+Weeks 1–11 cover the inference pipeline, safety logic, API/database integration, and frontend dashboard. Week 12 adds regression coverage, a throughput profiler, deployment guidance, and demo hardening. A long-duration hardware soak test remains a manual validation task.
 
-1. Start FastAPI and the Vite frontend using the commands above; switch the top bar to **LIVE MODE**.
-2. Open **Live Monitoring**. Under **Custom Video Source**, choose a video from your computer (MP4 is the safest choice; the backend also accepts MOV, AVI, MKV, WebM, MPEG, and MPG, up to 500 MB).
-3. The backend saves the file under `data/videos/`, adds it to **Video history**, and starts pipeline processing. The source can be selected again from the history list.
-4. Enable **Boxes**, **IDs & HAR**, **PPE Badges**, and **Hazard Zones** in the overlay controls. Bounding boxes and track IDs come from the detector/tracker; HAR labels appear when the trained checkpoint is present; hazard overlays come from configured zones.
-5. Open **Events & Incidents** and select an incident. When it was generated while an uploaded video was active, **Recorded Video Evidence** plays that uploaded source. The video is linked to the incident, while the captured keyframe remains in `data/snapshots/` as fallback evidence.
+## Author
 
-### B. Use a webcam
-
-1. Connect a webcam to the computer running the **backend**. OpenCV device `0` is the default; set `VIDEO_SOURCE=0` in the root `.env` or select **Default Webcam 0** in Live Monitoring.
-2. Run the app and select **LIVE MODE**. Click **Start Processing**. The browser only displays the backend's stream; it does not grant webcam access to the backend. If FastAPI runs on another server, that server needs its own attached camera or an RTSP source.
-3. Enable the same overlays. The live HAR mode is calibrated to `walking`, `standing`, and `sitting`; the recorded-video mode allows `walking`, `running`, `standing`, `sitting`, and `climbing`.
-4. For reliable HAR output, train and place `models/har_temporal_transformer.pt`. If the checkpoint is missing, the activity recognizer reports not ready and HAR predictions are unavailable. Confirm detector/PPE weights and device availability in `/api/health` and backend logs.
-
-**Bounding boxes, IDs, PPE, HAR, and hazard zones require Live Mode plus a working backend pipeline and model assets.** Demo Mode's simulated overlays are illustrative and are not model predictions.
-
----
-
-## 8. Deploy the frontend to Vercel
-
-The repository is a monorepo. Deploy the `frontend` directory as the Vercel project root; FastAPI, WebSocket streaming, computer-side video upload, model inference, and persistent video storage must run separately. Vercel documents automatic Vite support and recommends an SPA rewrite for deep links such as `/events/4` ([Vite on Vercel](https://vercel.com/docs/frameworks/frontend/vite), [rewrites](https://vercel.com/docs/routing/rewrites)).
-
-1. Push the repository to GitHub. In Vercel, choose **Add New → Project**, import `AI-Powered-Industrial-Safety-Monitoring-System`, and set **Root Directory** to `frontend`.
-2. Use the Vite defaults: **Framework Preset:** Vite, **Build Command:** `npm run build`, **Output Directory:** `dist`, **Install Command:** `npm install`. The checked-in `frontend/vercel.json` sends client-side routes back to `index.html`.
-3. Deploy the FastAPI backend separately to a host that can run the needed models and preserve `data/safety_monitor.db`, `data/videos/`, and `data/snapshots/`. Ensure the backend is reachable over HTTPS/WSS and accepts requests from the Vercel domain.
-   Set the backend's `CORS_ORIGINS` to a comma-separated allowlist containing your Vercel production domain (and any preview domain you use), for example `https://your-project.vercel.app`.
-4. In Vercel → **Project Settings → Environment Variables**, add these for Preview and Production, replacing the example host with the backend's public HTTPS hostname:
-
-   ```text
-   VITE_API_BASE_URL=https://your-backend.example.com
-   VITE_WS_URL=wss://your-backend.example.com/ws/stream
-   ```
-
-   Vite exposes `VITE_` variables in the browser bundle, so put only public URLs here—never `GEMINI_API_KEY` or other secrets. Vercel applies environment changes to new deployments, so redeploy after editing them ([Vercel environment variables](https://vercel.com/docs/environment-variables)).
-
-5. Trigger a deployment and verify the homepage, a deep link such as `/events/1`, `/api/health` through the configured backend, WebSocket status, and media playback. For a UI-only demo, leave the app in **Demo Mode**; Live Mode needs the separately hosted backend and its camera/model/storage prerequisites.
-
-For local Vite development, copy `frontend/.env.example` to `frontend/.env.local` and keep the backend running on `localhost:8010`.
-
-
-
+**Atharv Gupta** · [GitHub](https://github.com/atharv-0705)
