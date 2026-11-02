@@ -1,0 +1,17 @@
+{
+  "mAP50": 0.3707458628826835,
+  "mAP50-95": 0.1763591203966906,
+  "precision": 0.5179953018185852,
+  "recall": 0.3540586875626409,
+  "class_names": {
+    "0": "boots",
+    "1": "gloves",
+    "2": "hardhat",
+    "3": "no_boots",
+    "4": "no_gloves",
+    "5": "no_hardhat",
+    "6": "no_vest",
+    "7": "person",
+    "8": "vest"
+  }
+}

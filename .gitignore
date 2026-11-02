@@ -1,0 +1,47 @@
+# Virtual Environments
+.venv/
+env/
+venv/
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Environment variables & secrets
+.env
+
+# Media & local video dumps
+*.mp4
+*.avi
+*.mkv
+*.mov
+
+# IDE & Editor settings
+.idea/
+.vscode/
+
+# Checkpoints, Weights & Model Binary files (SRS §17 VRAM/Storage limits)
+yolo11n.pt
+models/*.pt
+models/*.manifest.json
+buffer_example.npy
+*.npy
+
+# Dataset local stores & SQLite databases
+data/raw/
+data/features/
+data/ppe/
+data/*.db
+data/*.db-shm
+data/*.db-wal
+data/downloads/*.rar
+
+# Jupyter Notebook artifacts
+.ipynb_checkpoints/
+
+# Frontend Web artifacts (Week 11)
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local

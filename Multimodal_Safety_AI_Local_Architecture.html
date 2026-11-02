@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Multimodal Safety AI — Local Real-Time System Architecture</title>
+<meta name="description" content="Hardware-aware local real-time architecture for multimodal human activity recognition and safety event detection on a Lenovo LOQ RTX 3050." />
+<style>
+  :root{
+    --bg:#07111f;
+    --panel:#0d1a2b;
+    --panel2:#102239;
+    --line:#28415f;
+    --text:#e8f0fa;
+    --muted:#9db0c7;
+    --accent:#62b0ff;
+    --accent2:#7ee0c3;
+    --warn:#ffc857;
+    --danger:#ff6978;
+    --shadow:0 18px 50px rgba(0,0,0,.28);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;
+    font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background:
+      radial-gradient(circle at 15% 10%, rgba(98,176,255,.13), transparent 28%),
+      radial-gradient(circle at 80% 15%, rgba(126,224,195,.10), transparent 25%),
+      var(--bg);
+    color:var(--text);
+    line-height:1.5;
+  }
+  .wrap{max-width:1240px;margin:0 auto;padding:28px 20px 70px}
+  .hero{
+    display:grid;grid-template-columns:1.6fr .9fr;gap:20px;align-items:stretch;
+    margin-bottom:26px;
+  }
+  .hero-card,.spec-card{
+    background:linear-gradient(145deg,rgba(16,34,57,.92),rgba(9,23,40,.92));
+    border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow);
+  }
+  .hero-card{padding:34px}
+  .eyebrow{
+    display:inline-flex;gap:8px;align-items:center;
+    padding:7px 11px;border:1px solid rgba(98,176,255,.35);
+    border-radius:999px;color:#bfe0ff;background:rgba(98,176,255,.08);
+    font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  }
+  h1{font-size:clamp(30px,4vw,54px);line-height:1.04;margin:18px 0 14px;letter-spacing:-.03em}
+  .hero-card p{color:var(--muted);font-size:16px;max-width:850px;margin:0}
+  .badge-row{display:flex;flex-wrap:wrap;gap:9px;margin-top:22px}
+  .badge{padding:8px 11px;border-radius:10px;background:#0c2036;border:1px solid #25405e;color:#c6d8ec;font-size:12px}
+  .spec-card{padding:22px}
+  .spec-card h3{margin:0 0 14px;font-size:15px}
+  .spec-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .spec{
+    padding:12px;border:1px solid #233e5c;border-radius:14px;background:rgba(255,255,255,.02)
+  }
+  .spec span{display:block;color:var(--muted);font-size:11px;margin-bottom:3px}
+  .spec strong{font-size:14px}
+
+  .section-title{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin:36px 0 15px}
+  .section-title h2{font-size:24px;margin:0;letter-spacing:-.02em}
+  .section-title p{margin:0;color:var(--muted);font-size:13px}
+
+  .architecture{
+    position:relative;
+    padding:22px;
+    border:1px solid var(--line);
+    border-radius:22px;
+    background:rgba(9,22,38,.78);
+    box-shadow:var(--shadow);
+    overflow:hidden;
+  }
+  .pipeline{
+    display:flex;flex-direction:column;align-items:center;
+    gap:0;
+  }
+  .node{
+    width:min(760px,100%);
+    position:relative;
+    border:1px solid #284767;
+    background:linear-gradient(145deg,#10253d,#0c1b2d);
+    border-radius:17px;
+    padding:16px 18px;
+    cursor:pointer;
+    transition:.22s ease;
+  }
+  .node:hover{transform:translateY(-2px);border-color:#4474a4;box-shadow:0 10px 30px rgba(0,0,0,.2)}
+  .node .top{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}
+  .node h3{margin:0;font-size:16px}
+  .node p{margin:4px 0 0;color:var(--muted);font-size:12px}
+  .tag{font-size:10px;padding:5px 8px;border-radius:8px;border:1px solid #32506f;color:#b8cce0;background:#0b1a2c;white-space:nowrap}
+  .arrow{
+    height:34px;width:2px;background:linear-gradient(var(--accent),rgba(98,176,255,.1));
+    position:relative;
+  }
+  .arrow:after{
+    content:"";position:absolute;bottom:-1px;left:-4px;border-left:5px solid transparent;border-right:5px solid transparent;border-top:8px solid var(--accent)
+  }
+  .fan{
+    display:grid;grid-template-columns:repeat(3,1fr);gap:12px;width:min(980px,100%);
+  }
+  .fan .node{width:auto}
+  .fan-title{
+    width:min(980px,100%);
+    display:flex;align-items:center;gap:10px;margin-top:3px;margin-bottom:11px;
+    color:#cfe1f5;font-weight:700;font-size:13px;
+  }
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--accent2);box-shadow:0 0 15px rgba(126,224,195,.45)}
+  .split-arrow{position:relative;height:30px;width:min(980px,100%)}
+  .split-arrow:before{
+    content:"";position:absolute;left:16.5%;right:16.5%;top:8px;height:1px;background:#365472
+  }
+  .split-arrow span{
+    position:absolute;top:0;left:50%;transform:translateX(-50%);
+    width:2px;height:22px;background:#365472
+  }
+
+  .flow-note{
+    margin-top:22px;padding:14px 16px;border-left:3px solid var(--accent2);
+    background:rgba(126,224,195,.06);color:#cde9df;border-radius:0 12px 12px 0;font-size:13px
+  }
+
+  .modules{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .card{
+    background:rgba(13,26,43,.88);border:1px solid var(--line);border-radius:18px;padding:18px;box-shadow:var(--shadow)
+  }
+  .card h3{margin:0 0 5px;font-size:16px}
+  .card .sub{color:var(--muted);font-size:12px;margin-bottom:12px}
+  .metric{
+    display:flex;justify-content:space-between;gap:10px;padding:8px 0;
+    border-bottom:1px dashed #24405d;font-size:12px
+  }
+  .metric:last-child{border-bottom:0}
+  .metric span{color:var(--muted)}
+  .ok{color:var(--accent2)}
+  .warn{color:var(--warn)}
+  .danger{color:var(--danger)}
+
+  .event-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .event{padding:18px;border-radius:18px;border:1px solid #2a4563;background:linear-gradient(145deg,#11243b,#0b1a2c)}
+  .event .icon{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:#0a1a2b;border:1px solid #294968;margin-bottom:12px}
+  .event h3{margin:0 0 5px;font-size:16px}
+  .event p{margin:0;color:var(--muted);font-size:12px}
+  .event b{color:#e7eff8}
+
+  .timeline{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .week{padding:16px;border:1px solid var(--line);border-radius:16px;background:rgba(13,26,43,.82)}
+  .week strong{display:block;font-size:13px;margin-bottom:7px}
+  .week span{display:block;color:var(--muted);font-size:12px;margin-bottom:4px}
+  .week .pct{display:inline-block;margin-top:9px;color:#cfe2f8;font-size:11px;padding:5px 8px;border-radius:8px;background:#0a1a2b;border:1px solid #27435f}
+
+  .excluded{display:flex;flex-wrap:wrap;gap:9px}
+  .excluded div{
+    padding:10px 12px;border-radius:12px;background:rgba(255,105,120,.05);
+    border:1px solid rgba(255,105,120,.24);color:#d7aab1;font-size:12px
+  }
+
+  .footer{
+    margin-top:28px;color:var(--muted);font-size:11px;text-align:center;
+    padding-top:18px;border-top:1px solid #17314b
+  }
+  .modal{
+    position:fixed;inset:0;background:rgba(2,7,13,.72);display:none;align-items:center;justify-content:center;padding:20px;z-index:10
+  }
+  .modal.open{display:flex}
+  .modal-card{
+    width:min(660px,100%);max-height:86vh;overflow:auto;
+    background:#0b1929;border:1px solid #31506f;border-radius:20px;padding:22px;box-shadow:0 28px 80px rgba(0,0,0,.45)
+  }
+  .modal-head{display:flex;justify-content:space-between;gap:20px;align-items:flex-start}
+  .close{
+    border:1px solid #2b4967;background:#0c1d30;color:#bfd2e6;border-radius:10px;padding:7px 10px;cursor:pointer
+  }
+  .modal-body{color:#c1d0df;font-size:13px}
+  .modal-body code{color:#cfe6ff}
+  @media(max-width:900px){
+    .hero{grid-template-columns:1fr}
+    .modules,.event-grid{grid-template-columns:1fr 1fr}
+    .timeline{grid-template-columns:1fr 1fr}
+    .fan{grid-template-columns:1fr}
+    .split-arrow{display:none}
+  }
+  @media(max-width:620px){
+    .modules,.event-grid,.timeline{grid-template-columns:1fr}
+    .hero-card{padding:24px}
+    .architecture{padding:12px}
+    .node{padding:14px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <section class="hero-card">
+      <div class="eyebrow">Local Real-Time Mode</div>
+      <h1>Multimodal Vision-Language Safety AI</h1>
+      <p>
+        Hardware-aware system architecture for Human Activity Recognition and real-time safety event detection,
+        optimized for a Lenovo LOQ-class laptop with an RTX 3050 and 16 GB RAM.
+      </p>
+      <div class="badge-row">
+        <div class="badge">YOLO11n</div>
+        <div class="badge">ByteTrack</div>
+        <div class="badge">MediaPipe Pose</div>
+        <div class="badge">Temporal Transformer</div>
+        <div class="badge">PPE Detector</div>
+        <div class="badge">FastAPI + WebSocket</div>
+        <div class="badge">React Dashboard</div>
+      </div>
+    </section>
+
+    <aside class="spec-card">
+      <h3>Target Hardware</h3>
+      <div class="spec-grid">
+        <div class="spec"><span>GPU</span><strong>RTX 3050 class</strong></div>
+        <div class="spec"><span>VRAM</span><strong>~6–8 GB</strong></div>
+        <div class="spec"><span>RAM</span><strong>16 GB</strong></div>
+        <div class="spec"><span>CPU</span><strong>8-core class</strong></div>
+        <div class="spec"><span>Storage</span><strong>100+ GB free target</strong></div>
+        <div class="spec"><span>Design goal</span><strong>Stable inference</strong></div>
+      </div>
+    </aside>
+  </header>
+
+  <div class="section-title">
+    <div>
+      <h2>System Architecture</h2>
+      <p>Click any module for implementation details.</p>
+    </div>
+    <p>Local inference • event-triggered explanation • no continuous heavy VLM</p>
+  </div>
+
+  <section class="architecture">
+    <div class="pipeline">
+      <div class="node" data-title="1. Video Stream" data-body="<b>Input:</b> webcam, MP4, or RTSP stream.<br><br><b>Recommended:</b> OpenCV + FFmpeg. Capture at 20–30 FPS, but do not run every AI model at camera FPS. Use a frame scheduler to control inference frequency.">
+        <div class="top"><div><h3>01 · Video Stream</h3><p>Webcam / MP4 / RTSP → OpenCV + FFmpeg</p></div><div class="tag">Input</div></div>
+      </div>
+      <div class="arrow"></div>
+
+      <div class="node" data-title="2. Object Detection" data-body="<b>Model:</b> YOLO11n.<br><br><b>Target:</b> person + relevant objects. Use 640×640 input, FP16 where supported, and start around 10–15 inference FPS. Upgrade to YOLO11s only if the measured FPS and VRAM budget remain comfortable.">
+        <div class="top"><div><h3>02 · YOLO11n Object Detection</h3><p>People, objects, bounding boxes, confidence scores</p></div><div class="tag">GPU • Low</div></div>
+      </div>
+      <div class="arrow"></div>
+
+      <div class="node" data-title="3. Tracking" data-body="<b>Tracker:</b> ByteTrack.<br><br>Assign persistent IDs such as Person #7 across frames. Tracking is lightweight and avoids recomputing temporal identity from scratch.">
+        <div class="top"><div><h3>03 · ByteTrack</h3><p>Persistent person IDs and trajectory history</p></div><div class="tag">CPU/GPU • Low</div></div>
+      </div>
+      <div class="arrow"></div>
+
+      <div class="fan-title"><span class="dot"></span>Parallel feature extraction</div>
+      <div class="fan">
+        <div class="node" data-title="4A. Pose Estimation" data-body="<b>Model:</b> MediaPipe Pose.<br><br>Run on person crops or tracked regions. Produce normalized joint coordinates, visibility, body angles and motion-related features.">
+          <div class="top"><div><h3>04A · MediaPipe Pose</h3><p>33 landmarks → skeleton sequence</p></div><div class="tag">Very Low</div></div>
+        </div>
+        <div class="node" data-title="4B. PPE Detection" data-body="<b>Model:</b> small custom YOLO PPE detector.<br><br>Start with helmet and optionally vest. Associate detected PPE with tracked persons. PPE status becomes structured evidence for the safety engine.">
+          <div class="top"><div><h3>04B · PPE Detector</h3><p>Helmet / vest status per person</p></div><div class="tag">Low–Medium</div></div>
+        </div>
+        <div class="node" data-title="4C. Zone Geometry" data-body="<b>No deep model required.</b><br><br>Define restricted polygons. Test the bottom-center foot point of each tracked person against the polygon and require temporal persistence (for example, 1–2 seconds) before creating an alert.">
+          <div class="top"><div><h3>04C · Zone Logic</h3><p>Restricted-area entry using geometry</p></div><div class="tag">Negligible</div></div>
+        </div>
+      </div>
+
+      <div class="arrow"></div>
+
+      <div class="node" data-title="5. General Human Activity Recognition" data-body="<b>Model:</b> small Temporal Transformer.<br><br><b>Input:</b> 16–32 frame sequences of normalized pose + motion features, optionally augmented with bounding-box motion.<br><br><b>Example classes:</b> walking, running, standing, sitting, climbing. This is the primary HAR model; it is not a heavy RGB video transformer.">
+        <div class="top"><div><h3>05 · Temporal Activity Recognition</h3><p>Pose + motion sequence → activity label</p></div><div class="tag">GPU • Low–Medium</div></div>
+      </div>
+      <div class="arrow"></div>
+
+      <div class="node" data-title="6. Safety Event Engine" data-body="<b>Core safety logic:</b><br>• Fall → pose + temporal features<br>• No Helmet → PPE detector + person association<br>• Restricted Zone → ByteTrack + polygon persistence<br><br>Use deterministic thresholds and temporal smoothing to reduce one-frame false alarms.">
+        <div class="top"><div><h3>06 · Safety Event Engine</h3><p>Fall • No Helmet • Restricted Zone</p></div><div class="tag">CPU-first</div></div>
+      </div>
+      <div class="arrow"></div>
+
+      <div class="node" data-title="7. Risk Engine" data-body="<b>Deterministic scoring.</b><br><br>Combine event severity, detector confidence, exposure duration and context modifiers. Keep the numerical risk score independent from the VLM so the result is repeatable and auditable.">
+        <div class="top"><div><h3>07 · Risk Engine</h3><p>Evidence + confidence + duration → 0–100 risk score</p></div><div class="tag">CPU • Very Low</div></div>
+      </div>
+      <div class="arrow"></div>
+
+      <div class="node" data-title="8. Optional Event-Triggered VLM" data-body="<b>Do not run a large VLM continuously on the RTX 3050.</b><br><br>When a safety event is triggered, capture 3–6 evidence frames and optionally pass them to a lightweight/local or stronger external VLM to generate a natural-language explanation.<br><br>The core system must remain functional when VLM inference is unavailable.">
+        <div class="top"><div><h3>08 · Optional Event-Triggered VLM</h3><p>Evidence frames → contextual explanation</p></div><div class="tag">Event-only</div></div>
+      </div>
+      <div class="arrow"></div>
+
+      <div class="node" data-title="9. API + Real-Time Transport" data-body="<b>Backend:</b> FastAPI.<br><b>Transport:</b> REST + WebSocket.<br><br>REST handles cameras, history, events and settings. WebSocket pushes live detections, activity, risk and alerts to the dashboard without aggressive polling.">
+        <div class="top"><div><h3>09 · FastAPI + WebSocket</h3><p>Inference results → real-time application layer</p></div><div class="tag">CPU • Low</div></div>
+      </div>
+      <div class="arrow"></div>
+
+      <div class="node" data-title="10. React Dashboard" data-body="<b>Frontend:</b> React.<br><br>Show live feed, person boxes, tracking IDs, activity labels, risk score, active alerts, event timeline, event details and AI explanations. Keep analytics secondary to the live monitoring view.">
+        <div class="top"><div><h3>10 · React Real-Time Dashboard</h3><p>Live monitoring • alerts • risk • explanations</p></div><div class="tag">Browser</div></div>
+      </div>
+    </div>
+
+    <div class="flow-note">
+      <b>Hardware rule:</b> camera capture can be 30 FPS, but the AI workload is intentionally scheduled at lower rates.
+      Suggested starting point: YOLO 10–15 FPS, pose 10–15 FPS, HAR 5–10 FPS, and VLM only after an event trigger.
+    </div>
+  </section>
+
+  <div class="section-title">
+    <div><h2>MVP Safety Events</h2><p>Three events are enough to demonstrate the complete architecture.</p></div>
+  </div>
+
+  <section class="event-grid">
+    <div class="event">
+      <div class="icon">⌁</div>
+      <h3>Fall Detection</h3>
+      <p><b>Signal:</b> pose + temporal motion features. Detect rapid downward movement, body orientation change and low-position persistence.</p>
+    </div>
+    <div class="event">
+      <div class="icon">●</div>
+      <h3>No Helmet</h3>
+      <p><b>Signal:</b> PPE detector + person association. Avoid asking the VLM to perform the low-level helmet decision.</p>
+    </div>
+    <div class="event">
+      <div class="icon">□</div>
+      <h3>Restricted Zone</h3>
+      <p><b>Signal:</b> person tracking + polygon geometry + temporal persistence. No additional deep model is necessary.</p>
+    </div>
+  </section>
+
+  <div class="section-title">
+    <div><h2>Runtime Budget</h2><p>Target an efficient pipeline instead of forcing every model to run at camera FPS.</p></div>
+  </div>
+
+  <section class="modules">
+    <div class="card">
+      <h3>Inference Schedule</h3>
+      <div class="sub">Starting configuration</div>
+      <div class="metric"><span>Camera capture</span><b>20–30 FPS</b></div>
+      <div class="metric"><span>YOLO11n</span><b>10–15 FPS</b></div>
+      <div class="metric"><span>ByteTrack</span><b>20–30 FPS</b></div>
+      <div class="metric"><span>MediaPipe Pose</span><b>10–15 FPS</b></div>
+      <div class="metric"><span>HAR Transformer</span><b>5–10 FPS</b></div>
+      <div class="metric"><span>VLM</span><b class="ok">Event only</b></div>
+    </div>
+    <div class="card">
+      <h3>Resource Strategy</h3>
+      <div class="sub">Keep VRAM predictable</div>
+      <div class="metric"><span>Heavy models always resident</span><b class="danger">Avoid</b></div>
+      <div class="metric"><span>Mixed-precision inference</span><b class="ok">Prefer FP16</b></div>
+      <div class="metric"><span>Temporal buffering</span><b class="ok">32 frames max</b></div>
+      <div class="metric"><span>Evidence frames</span><b>3–6 / event</b></div>
+      <div class="metric"><span>Video stored in DB</span><b class="danger">No</b></div>
+    </div>
+    <div class="card">
+      <h3>Stability Rules</h3>
+      <div class="sub">Designed to avoid crashes</div>
+      <div class="metric"><span>Bound queue size</span><b class="ok">Yes</b></div>
+      <div class="metric"><span>Drop stale frames</span><b class="ok">Yes</b></div>
+      <div class="metric"><span>Model warm-up</span><b class="ok">Yes</b></div>
+      <div class="metric"><span>Graceful VLM failure</span><b class="ok">Yes</b></div>
+      <div class="metric"><span>Continuous memory checks</span><b class="ok">Yes</b></div>
+    </div>
+  </section>
+
+  <div class="section-title">
+    <div><h2>Three-Month Implementation</h2><p>Build the stable local system first; intelligence and polish come later.</p></div>
+  </div>
+
+  <section class="timeline">
+    <div class="week">
+      <strong>Weeks 1–2 · Video + Detection</strong>
+      <span>OpenCV / FFmpeg</span><span>YOLO11n</span><span>ByteTrack</span><span>FPS + latency instrumentation</span>
+      <div class="pct">Foundation</div>
+    </div>
+    <div class="week">
+      <strong>Weeks 3–4 · Pose + PPE + Zone</strong>
+      <span>MediaPipe Pose</span><span>Helmet detector</span><span>Restricted polygon</span><span>Event logging</span>
+      <div class="pct">Safety primitives</div>
+    </div>
+    <div class="week">
+      <strong>Weeks 5–8 · HAR + Risk</strong>
+      <span>Pose sequence dataset</span><span>Temporal Transformer</span><span>Fall logic/classifier</span><span>Risk engine</span>
+      <div class="pct">Core intelligence</div>
+    </div>
+    <div class="week">
+      <strong>Weeks 9–12 · App + Evaluation</strong>
+      <span>FastAPI + WebSocket</span><span>React dashboard</span><span>Optional VLM</span><span>Testing + benchmark</span>
+      <div class="pct">Deployment-ready MVP</div>
+    </div>
+  </section>
+
+  <div class="section-title">
+    <div><h2>Intentionally Removed From MVP</h2><p>Removed because the added compute/complexity is not justified by the three-month hardware constraint.</p></div>
+  </div>
+  <section class="excluded">
+    <div>SlowFast fighting detection</div>
+    <div>Video Swin</div>
+    <div>TimeSformer</div>
+    <div>Large local Qwen VLM</div>
+    <div>Multiple simultaneous heavy video models</div>
+    <div>Complex learned multimodal fusion network</div>
+  </section>
+
+  <div class="footer">
+    Architecture baseline: Local Real-Time Mode • Optimized for RTX 3050-class hardware • Image/video remain the primary inputs.
+  </div>
+</div>
+
+<div class="modal" id="modal">
+  <div class="modal-card">
+    <div class="modal-head">
+      <div>
+        <div class="eyebrow">Module details</div>
+        <h2 id="modalTitle" style="margin:12px 0 0">Module</h2>
+      </div>
+      <button class="close" id="closeBtn">Close</button>
+    </div>
+    <div class="modal-body" id="modalBody" style="margin-top:16px"></div>
+  </div>
+</div>
+
+<script>
+  const modal = document.getElementById('modal');
+  const title = document.getElementById('modalTitle');
+  const body = document.getElementById('modalBody');
+
+  document.querySelectorAll('.node').forEach(node => {
+    node.addEventListener('click', () => {
+      title.textContent = node.dataset.title;
+      body.innerHTML = node.dataset.body;
+      modal.classList.add('open');
+    });
+  });
+
+  document.getElementById('closeBtn').addEventListener('click', () => modal.classList.remove('open'));
+  modal.addEventListener('click', e => { if(e.target === modal) modal.classList.remove('open'); });
+  document.addEventListener('keydown', e => { if(e.key === 'Escape') modal.classList.remove('open'); });
+</script>
+</body>
+</html>

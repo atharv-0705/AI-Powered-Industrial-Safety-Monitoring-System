@@ -1,0 +1,67 @@
+# Multimodal Safety AI Monitor - System Configuration
+# Externalized configuration per SRS NFR-08
+
+app:
+  name: "Multimodal Safety AI Monitor"
+  host: "0.0.0.0"
+  port: 8010
+  log_level: "INFO"
+
+video:
+  source: "0"                  # "0" for webcam index 0, or file path e.g. "data/test.mp4"
+  source_fps: 30
+  processing_fps: 12
+  max_queue_size: 2
+
+detection:
+  model_path: "yolo11n.pt"     # Baseline YOLO11n pretrained on COCO (class 0: person)
+  conf_threshold: 0.4
+  img_size: 640
+  device: "auto"               # "auto", "cuda:0", "cpu"
+  tracker_config: "bytetrack.yaml"
+
+pose:
+  model_complexity: 1          # 0=lite, 1=full, 2=heavy
+  min_detection_confidence: 0.5
+  static_image_mode: true      # treats per-person bbox crops independently
+
+features:
+  sequence_length: 32          # 32 frames per temporal buffer
+  feature_dim: 205             # 132 lm + 66 vel + 2 angles + 1 orient + 2 bbox + 2 bbox_vel
+  stale_track_frames: 60       # prune buffers inactive for ~5 seconds
+
+har:
+  checkpoint_path: "models/har_temporal_transformer.pt"
+  device: "auto"
+  d_model: 128
+  nhead: 4
+  num_layers: 2
+  classes:
+    - "walking"
+    - "running"
+    - "standing"
+    - "sitting"
+    - "climbing"
+
+ppe:
+  model_path: "models/ppe_yolo11n.pt"
+  conf_threshold: 0.4
+  device: "auto"
+  classes:
+    - "helmet"
+    - "no-helmet"
+    - "vest"
+    - "no-vest"
+
+safety_rules:
+  fall_aspect_ratio_threshold: 0.8
+  fall_confirmation_frames: 6
+  restricted_zones: []         # [[x1, y1], [x2, y2], ...] normalized coordinates
+
+vlm:
+  enabled: false
+  model: "gemini-1.5-flash"
+  rate_limit_seconds: 10
+
+database:
+  url: "sqlite:///./data/safety_monitor.db"
