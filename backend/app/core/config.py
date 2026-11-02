@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = 8010
     LOG_LEVEL: str = "INFO"
+    CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     # Video ingestion (FR-01, FR-03)
     VIDEO_SOURCE: str = "0"          # "0" = webcam index 0, or a file path

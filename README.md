@@ -211,7 +211,7 @@ python backend/scripts/test_risk_engine.py
 | **Week 9** | Multimodal VLM Integration | **Complete** | Gemini 1.5 Flash async verification, incident summaries, graceful fallback (`gemini_client.py`) |
 | **Week 10**| WebSocket Streaming & Database | **Complete** | Low-latency binary/JSON streaming, SQLite incident & snapshot storage (`database.py`, `websocket.py`) |
 | **Week 11**| Frontend Web Dashboard | **Complete** | React 18 + TypeScript + Vite + Tailwind dark industrial dashboard (`frontend/`) |
-| **Week 12**| System Integration & Profiling | Planned | End-to-end stress test on Lenovo LOQ, PyTest test suite, final docs |
+| **Week 12**| System Integration & Profiling | In progress | Repeatable regression tests, pipeline throughput profiler, demo and deployment documentation; hardware soak test remains |
 
 ### Running the System (Backend + Frontend)
 
@@ -242,6 +242,91 @@ To run the FastAPI server with live streaming and incident REST endpoints:
 ```bash
 uvicorn backend.app.main:app --host 0.0.0.0 --port 8010 --reload
 ```
+
+---
+
+## 6. Week 12: Profiling, Testing & Demo Hardening
+
+### Automated regression checks
+
+From the repository root, after installing `requirements.txt`:
+
+```bash
+pytest backend/tests -q
+```
+
+The Week 12 tests cover webcam-versus-file source classification, uploaded-video validation/history, and persistence of a video link on an incident record. The existing scripts under `backend/scripts/` remain useful for manual model and hardware checks.
+
+### End-to-end throughput profile
+
+Start the backend first, then run this in another terminal. The profiler starts the pipeline, samples frame count and backend FPS for one minute, prints measured throughput and backend FPS range, then stops the pipeline.
+
+```bash
+python backend/scripts/profile_pipeline.py --seconds 60
+python backend/scripts/profile_pipeline.py --source data/videos/sample.mp4 --seconds 120
+```
+
+Use the same clip, model weights, resolution, and device when comparing results. The script profiles throughput; it does not replace the longer hardware soak test. Week 12 exit checks should also include a 30-minute run while watching RAM/VRAM, dropped frames, reconnects, database growth, and camera/model recovery after disconnects.
+
+### Local app run
+
+```bash
+# Terminal 1, repository root
+uvicorn backend.app.main:app --host 0.0.0.0 --port 8010
+
+# Terminal 2
+cd frontend
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173`. The backend must be running for live mode, upload, camera enumeration, saved video history, and live incidents. The Vercel deployment only hosts the frontend; deploy FastAPI separately on a machine with the required model files, camera access, and persistent storage.
+
+---
+
+## 7. Demo Mode vs Live Mode
+
+The top-bar mode switch controls the dashboard data source. **Demo Mode** is a frontend simulation with mock cameras, synthetic scene art, and generated telemetry; it does not run YOLO, pose, HAR, PPE, or the backend safety pipeline. Use it to present and navigate the UI without camera hardware or model files. **Live Mode** connects the frontend to FastAPI and its WebSocket. It displays frames and telemetry produced by the backend pipeline and writes incidents to the local SQLite database.
+
+### A. Upload a video and see detections
+
+1. Start FastAPI and the Vite frontend using the commands above; switch the top bar to **LIVE MODE**.
+2. Open **Live Monitoring**. Under **Custom Video Source**, choose a video from your computer (MP4 is the safest choice; the backend also accepts MOV, AVI, MKV, WebM, MPEG, and MPG, up to 500 MB).
+3. The backend saves the file under `data/videos/`, adds it to **Video history**, and starts pipeline processing. The source can be selected again from the history list.
+4. Enable **Boxes**, **IDs & HAR**, **PPE Badges**, and **Hazard Zones** in the overlay controls. Bounding boxes and track IDs come from the detector/tracker; HAR labels appear when the trained checkpoint is present; hazard overlays come from configured zones.
+5. Open **Events & Incidents** and select an incident. When it was generated while an uploaded video was active, **Recorded Video Evidence** plays that uploaded source. The video is linked to the incident, while the captured keyframe remains in `data/snapshots/` as fallback evidence.
+
+### B. Use a webcam
+
+1. Connect a webcam to the computer running the **backend**. OpenCV device `0` is the default; set `VIDEO_SOURCE=0` in the root `.env` or select **Default Webcam 0** in Live Monitoring.
+2. Run the app and select **LIVE MODE**. Click **Start Processing**. The browser only displays the backend's stream; it does not grant webcam access to the backend. If FastAPI runs on another server, that server needs its own attached camera or an RTSP source.
+3. Enable the same overlays. The live HAR mode is calibrated to `walking`, `standing`, and `sitting`; the recorded-video mode allows `walking`, `running`, `standing`, `sitting`, and `climbing`.
+4. For reliable HAR output, train and place `models/har_temporal_transformer.pt`. If the checkpoint is missing, the activity recognizer reports not ready and HAR predictions are unavailable. Confirm detector/PPE weights and device availability in `/api/health` and backend logs.
+
+**Bounding boxes, IDs, PPE, HAR, and hazard zones require Live Mode plus a working backend pipeline and model assets.** Demo Mode's simulated overlays are illustrative and are not model predictions.
+
+---
+
+## 8. Deploy the frontend to Vercel
+
+The repository is a monorepo. Deploy the `frontend` directory as the Vercel project root; FastAPI, WebSocket streaming, computer-side video upload, model inference, and persistent video storage must run separately. Vercel documents automatic Vite support and recommends an SPA rewrite for deep links such as `/events/4` ([Vite on Vercel](https://vercel.com/docs/frameworks/frontend/vite), [rewrites](https://vercel.com/docs/routing/rewrites)).
+
+1. Push the repository to GitHub. In Vercel, choose **Add New → Project**, import `AI-Powered-Industrial-Safety-Monitoring-System`, and set **Root Directory** to `frontend`.
+2. Use the Vite defaults: **Framework Preset:** Vite, **Build Command:** `npm run build`, **Output Directory:** `dist`, **Install Command:** `npm install`. The checked-in `frontend/vercel.json` sends client-side routes back to `index.html`.
+3. Deploy the FastAPI backend separately to a host that can run the needed models and preserve `data/safety_monitor.db`, `data/videos/`, and `data/snapshots/`. Ensure the backend is reachable over HTTPS/WSS and accepts requests from the Vercel domain.
+   Set the backend's `CORS_ORIGINS` to a comma-separated allowlist containing your Vercel production domain (and any preview domain you use), for example `https://your-project.vercel.app`.
+4. In Vercel → **Project Settings → Environment Variables**, add these for Preview and Production, replacing the example host with the backend's public HTTPS hostname:
+
+   ```text
+   VITE_API_BASE_URL=https://your-backend.example.com
+   VITE_WS_URL=wss://your-backend.example.com/ws/stream
+   ```
+
+   Vite exposes `VITE_` variables in the browser bundle, so put only public URLs here—never `GEMINI_API_KEY` or other secrets. Vercel applies environment changes to new deployments, so redeploy after editing them ([Vercel environment variables](https://vercel.com/docs/environment-variables)).
+
+5. Trigger a deployment and verify the homepage, a deep link such as `/events/1`, `/api/health` through the configured backend, WebSocket status, and media playback. For a UI-only demo, leave the app in **Demo Mode**; Live Mode needs the separately hosted backend and its camera/model/storage prerequisites.
+
+For local Vite development, copy `frontend/.env.example` to `frontend/.env.local` and keep the backend running on `localhost:8010`.
 
 
 

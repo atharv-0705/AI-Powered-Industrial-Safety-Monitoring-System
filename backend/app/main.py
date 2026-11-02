@@ -14,6 +14,7 @@ from backend.app.api import websocket
 from backend.app.api.routes import health, incidents, cameras
 from backend.app.core.config import get_settings
 from backend.app.core.pipeline_runner import get_pipeline_runner
+from backend.app.services.video_storage import list_uploaded_videos, save_uploaded_video
 
 settings = get_settings()
 
@@ -22,11 +23,12 @@ logger = logging.getLogger("safety-ai-mvp")
 
 app = FastAPI(title=settings.APP_NAME, version="0.1.0")
 
-# Local dev: React dashboard typically runs on :3000 or :5173 (Vite)
+# Comma-separated frontend origins, with the localhost defaults from .env.
+cors_origins = [origin.strip() for origin in settings.CORS_ORIGINS.split(",") if origin.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Open CORS for dev dashboard
-    allow_credentials=True,
+    allow_origins=cors_origins,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -75,14 +77,12 @@ async def start_pipeline(source: str | None = None):
 
 
 @app.post("/api/videos")
-async def upload_video(file: UploadFile = File(...)):
-    from backend.app.api.routes.cameras import save_uploaded_video
-    return await save_uploaded_video(file)
+def upload_video(file: UploadFile = File(...)):
+    return save_uploaded_video(file)
 
 
 @app.get("/api/videos")
 def list_videos():
-    from backend.app.api.routes.cameras import list_uploaded_videos
     return list_uploaded_videos()
 
 

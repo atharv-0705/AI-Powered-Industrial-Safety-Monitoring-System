@@ -28,6 +28,12 @@ import {
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 
+export const getAssetUrl = (path?: string | null): string => {
+  if (!path) return "";
+  if (/^(?:https?:)?\/\//i.test(path) || path.startsWith("data:")) return path;
+  return `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
+};
+
 // In-memory local stores for DEMO / local mode overrides
 let localIncidents: IncidentRecord[] = [...DEMO_INCIDENTS];
 let localZones: ZonePolygon[] = [...DEMO_ZONES];

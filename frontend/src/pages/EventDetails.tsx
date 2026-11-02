@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { SeverityBadge } from "@/components/common/SeverityBadge";
 import { RiskGauge } from "@/components/common/RiskGauge";
-import { apiService } from "@/services/api";
+import { apiService, getAssetUrl } from "@/services/api";
 import { IncidentRecord } from "@/types/safety";
 import {
   formatDateTime,
@@ -141,12 +141,12 @@ export const EventDetails: React.FC = () => {
             {/* Evidence Image Viewer */}
             <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-slate-950 border border-slate-800 flex items-center justify-center">
               {incident.video_path ? (
-                <video src={incident.video_path} controls className="w-full h-full object-contain" preload="metadata">
+                <video src={getAssetUrl(incident.video_path)} controls className="w-full h-full object-contain" preload="metadata">
                   Your browser cannot play this incident video.
                 </video>
               ) : incident.snapshot_path ? (
                 <img
-                  src={incident.snapshot_path}
+                  src={getAssetUrl(incident.snapshot_path)}
                   alt="Incident keyframe evidence"
                   className="w-full h-full object-contain"
                   onError={(e) => {
