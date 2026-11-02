@@ -11,7 +11,7 @@ An edge-oriented computer-vision application for monitoring workplace safety in 
 
 ## Frontend Live Link
 
-> **Frontend Live Link:** _Add the Vercel URL here after deployment._
+> **Frontend Live Link:** [_AI_Powered_Industrial_Safety_Monitoring_System_](https://ai-powered-industrial-safety-monito.vercel.app/)
 
 The frontend is deployable to Vercel. The FastAPI backend, inference models, camera source, database, and uploaded-video storage must run on a separate host with the required hardware and persistent storage.
 
